@@ -1,0 +1,15 @@
+# Build / fetch logs
+fetch.log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+
+# Local Claude config
+.claude/
