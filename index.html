@@ -67,6 +67,21 @@
   }
   .control button { cursor: pointer; min-width: auto; }
   .control button:hover { background: var(--empty); }
+  .year-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font: inherit;
+    font-size: 13px;
+    line-height: 1;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--fg); color: var(--fg); }
+  .chip.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .chip.on:hover { background: var(--fg); color: var(--bg); opacity: 0.8; }
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -206,6 +221,10 @@
     <label>&nbsp;</label>
     <button id="swapBtn" title="Region A und B tauschen">A ⇄ B</button>
   </div>
+  <div class="control">
+    <label>Jahre</label>
+    <div id="yearChips" class="year-chips"></div>
+  </div>
 </div>
 
 <div class="legend">
@@ -231,13 +250,32 @@
 (() => {
   const DATA = JSON.parse(document.getElementById('ferien-data').textContent);
   const YEARS = DATA.years;
+  const CURRENT_YEAR = new Date().getFullYear();
+  // Past years stay embedded in the data but are off by default; only the
+  // current year onward is active. The year chips toggle membership here.
+  const activeYears = new Set(YEARS.filter(y => y >= CURRENT_YEAR));
+  const visibleYears = () => YEARS.filter(y => activeYears.has(y));
 
   const $regionA = document.getElementById('regionA');
   const $regionB = document.getElementById('regionB');
   const $viewMode = document.getElementById('viewMode');
   const $swap = document.getElementById('swapBtn');
   const $main = document.getElementById('main');
+  const $chips = document.getElementById('yearChips');
   const $tip = document.getElementById('tooltip');
+
+  // A/B accent colors: single source of truth are the CSS variables in :root.
+  const rootStyle = getComputedStyle(document.documentElement);
+  const hexToRgb = hex => {
+    const n = parseInt(hex.slice(1), 16);
+    return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+  };
+  const colorOf = name => {
+    const hex = rootStyle.getPropertyValue(name).trim();
+    return { hex, rgb: hexToRgb(hex) };
+  };
+  const COLOR_A = colorOf('--a-pub');
+  const COLOR_B = colorOf('--b-pub');
 
   const pad = n => String(n).padStart(2, '0');
   const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -304,9 +342,9 @@
     const oA = countA > 0 ? bins[countA] : 0;
     const oB = hasB && countB > 0 ? bins[countB] : 0;
     if (oA === 0 && oB === 0) return 'var(--empty)';
-    if (!hasB || oB === 0) return `rgba(214, 58, 58, ${oA})`;
-    if (oA === 0) return `rgba(59, 110, 214, ${oB})`;
-    return `linear-gradient(135deg, rgba(214,58,58,${oA}) 50%, rgba(59,110,214,${oB}) 50%)`;
+    if (!hasB || oB === 0) return `rgba(${COLOR_A.rgb}, ${oA})`;
+    if (oA === 0) return `rgba(${COLOR_B.rgb}, ${oB})`;
+    return `linear-gradient(135deg, rgba(${COLOR_A.rgb}, ${oA}) 50%, rgba(${COLOR_B.rgb}, ${oB}) 50%)`;
   }
 
   function renderYear(year, mapA, mapB, hasB, collapsed) {
@@ -424,8 +462,8 @@
         if (entry.school.length) parts.push('Schulferien: ' + entry.school.join(', '));
         return `<div class="row"><span class="pill" style="background:${hue};color:#fff">${label}</span>${parts.join(' · ')}</div>`;
       };
-      html += sectionFor('A · ' + labelA, ea, '#d63a3a');
-      if (hasB) html += sectionFor('B · ' + labelB, eb, '#3b6ed6');
+      html += sectionFor('A · ' + labelA, ea, COLOR_A.hex);
+      if (hasB) html += sectionFor('B · ' + labelB, eb, COLOR_B.hex);
       return html;
     } else {
       const start = parseISO(cell.dataset.start);
@@ -446,8 +484,8 @@
       const cA = countFor(mapA);
       const cB = countFor(mapB);
       let html = `<b>Woche ${start.toLocaleDateString('de-CH')} – ${end.toLocaleDateString('de-CH')}</b>`;
-      html += `<div class="row"><span class="pill" style="background:#d63a3a;color:#fff">A · ${labelA}</span>${cA.p} Feiertag${cA.p===1?'':'e'} · ${cA.s} Schulferientag${cA.s===1?'':'e'}</div>`;
-      if (hasB) html += `<div class="row"><span class="pill" style="background:#3b6ed6;color:#fff">B · ${labelB}</span>${cB.p} Feiertag${cB.p===1?'':'e'} · ${cB.s} Schulferientag${cB.s===1?'':'e'}</div>`;
+      html += `<div class="row"><span class="pill" style="background:${COLOR_A.hex};color:#fff">A · ${labelA}</span>${cA.p} Feiertag${cA.p===1?'':'e'} · ${cA.s} Schulferientag${cA.s===1?'':'e'}</div>`;
+      if (hasB) html += `<div class="row"><span class="pill" style="background:${COLOR_B.hex};color:#fff">B · ${labelB}</span>${cB.p} Feiertag${cB.p===1?'':'e'} · ${cB.s} Schulferientag${cB.s===1?'':'e'}</div>`;
       return html;
     }
   }
@@ -522,7 +560,7 @@
     labelA = $regionA.options[$regionA.selectedIndex]?.textContent || '';
     labelB = codeB ? ($regionB.options[$regionB.selectedIndex]?.textContent || '') : '';
     $main.innerHTML = '';
-    for (const y of YEARS) {
+    for (const y of visibleYears()) {
       $main.appendChild(renderYear(y, mapA, mapB, !!codeB, collapsed));
     }
   }
@@ -537,9 +575,27 @@
     render();
   });
 
+  function renderChips() {
+    $chips.innerHTML = '';
+    for (const y of YEARS) {
+      const b = document.createElement('button');
+      b.className = 'chip' + (activeYears.has(y) ? ' on' : '');
+      b.textContent = y;
+      b.setAttribute('aria-pressed', activeYears.has(y) ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        if (activeYears.has(y)) activeYears.delete(y);
+        else activeYears.add(y);
+        renderChips();
+        render();
+      });
+      $chips.appendChild(b);
+    }
+  }
+
   populateSelect($regionA, false);
   populateSelect($regionB, true);
   $regionA.value = 'CH-ZH';
+  renderChips();
   render();
 })();
 </script>
